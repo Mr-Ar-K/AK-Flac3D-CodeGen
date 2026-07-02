@@ -9,10 +9,6 @@ class GeometryCleaner:
     def assemble_regions(lines: list) -> list:
         if not lines:
             return []
-            
-        # Merges overlaps and intersections cleanly
         unified_lines = unary_union(lines)
-        
-        # Resolves dangling topological lines into fully formed Polygons
         polygons = list(polygonize(unified_lines))
         return polygons

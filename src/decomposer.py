@@ -14,12 +14,10 @@ class GeometricDecomposer:
         sloped_triangles = []
         orthogonal_pieces = polygon
         
-        # 1. Identify and cut out sloped corners (Right Triangles)
         for i in range(len(exterior_coords) - 1):
             p1 = exterior_coords[i]
             p2 = exterior_coords[i+1]
             
-            # If line segment is diagonal/sloped
             if abs(p1[0] - p2[0]) > self.tolerance and abs(p1[1] - p2[1]) > self.tolerance:
                 v1 = (p1[0], p2[1])
                 v2 = (p2[0], p1[1])
@@ -31,7 +29,6 @@ class GeometricDecomposer:
                         orthogonal_pieces = orthogonal_pieces.difference(tri)
                         break
 
-        # 2. Segment remaining axis-aligned geometries
         if orthogonal_pieces.is_empty:
             orthogonal_polys = []
         elif isinstance(orthogonal_pieces, MultiPolygon):
@@ -55,7 +52,6 @@ class GeometricDecomposer:
             merged_rects = self._merge_cells(raw_cells)
             rectangles_and_squares.extend(merged_rects)
 
-        # 3. Format Rectangles and Squares
         for rect in rectangles_and_squares:
             minx, miny, maxx, maxy = rect.bounds
             w, h = maxx - minx, maxy - miny
@@ -64,7 +60,6 @@ class GeometricDecomposer:
             coords = [(minx, miny), (maxx, miny), (maxx, maxy), (minx, maxy)]
             elements.append({"type": el_type, "coordinates": coords})
             
-        # 4. Format Triangles
         for tri in sloped_triangles:
             coords = list(tri.exterior.coords)[:-1]
             elements.append({"type": "Right Triangle", "coordinates": coords})

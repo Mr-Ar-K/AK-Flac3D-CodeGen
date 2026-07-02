@@ -1,43 +1,52 @@
 import os
-import sys
+import tempfile
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from src.parser import DXFParser
 from src.cleaner import GeometryCleaner
 from src.decomposer import GeometricDecomposer
+import uvicorn
 
-def main():
-    # Looks for a file named "input.dxf" in the current active working directory
-    dxf_filename = "input.dxf"
-    
-    if not os.path.exists(dxf_filename):
-        print(f"Error: '{dxf_filename}' not found in root workspace direction.")
-        print("Please place your target drawing file here or modify main.py.")
-        sys.exit(1)
+app = FastAPI(title="FLAC3D DXF Compiler API")
+
+# Mount the static folder to serve the frontend
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    with open("static/index.html", "r") as f:
+        return f.read()
+
+@app.post("/api/process-dxf")
+async def process_dxf(file: UploadFile = File(...)):
+    # Save the uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
+        temp_file.write(await file.read())
+        temp_path = temp_file.name
+
+    try:
+        # Parse and process
+        raw_lines = DXFParser.extract_lines(temp_path)
+        regions = GeometryCleaner.assemble_regions(raw_lines)
         
-    print(f"Parsing drawing profile data from: {dxf_filename}")
-    raw_lines = DXFParser.extract_lines(dxf_filename)
+        if not regions:
+            return {"error": "No valid closed geometric profiles mapped."}
+
+        decomposer = GeometricDecomposer()
+        all_elements = []
+
+        for region_poly in regions:
+            elements = decomposer.process_polygon(region_poly)
+            all_elements.extend(elements)
+            
+        return {"elements": all_elements}
     
-    regions = GeometryCleaner.assemble_regions(raw_lines)
-    if not regions:
-        print("Processing stopped: No valid closed shapes could be mapped.")
-        return
-
-    decomposer = GeometricDecomposer()
-    element_global_id = 1
-
-    print(f"Discovered {len(regions)} closed geometric profiles.\n")
-
-    for region_idx, region_poly in enumerate(regions, start=1):
-        elements = decomposer.process_polygon(region_poly)
-        
-        for element in elements:
-            # Custom clean text formatting: bracket-less presentation style
-            print(f"Element {element_global_id}")
-            print(f"Type: {element['type']}")
-            print("Coordinates:")
-            for x, y in element['coordinates']:
-                print(f"  {round(x, 4)} {round(y, 4)}")
-            print("-" * 30)
-            element_global_id += 1
+    finally:
+        # Clean up temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 if __name__ == "__main__":
-    main()
+    print("Starting server at http://127.0.0.1:8000")
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
